@@ -13,6 +13,9 @@ vehicle:
 fraud:
 	PYTHONPATH=./ $(PYTHON) -m src.fraud.fraud
 	
+system_usage:
+	$(PYTHON) -m src.fraud.system_usage
+
 # 清理生成的文件
 clean:
 	find . -type d -name "__pycache__" -exec rm -r {} +
