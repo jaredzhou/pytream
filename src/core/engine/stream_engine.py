@@ -1,69 +1,88 @@
 from typing import List, Dict
 from ..job import Job
-from .event_queue import EventQueue
-from .component_executor import ComponentExecutor
 from ..operator import Operator
+from .component_executor import ComponentExecutor
+from .dispatch_executor import DispatchExecutor
+from .event_queue import EventQueue
+from ..component import Component
+
+
+class Connection:
+    def __init__(
+        self, source: ComponentExecutor, target: ComponentExecutor, channel: str
+    ):
+        self.source = source
+        self.target = target
+        self.channel = channel
+
 
 class StreamEngine:
     """流处理执行引擎"""
-    
+
     QUEUE_SIZE = 64
-    
+
     def __init__(self):
-        self.executors: List[ComponentExecutor] = []
+        self.component_executors: List[ComponentExecutor] = []
         self.operator_map: Dict[Operator, ComponentExecutor] = {}
-        
+        self.connections: List[Connection] = []
+
     def submit(self, job: Job) -> None:
         """提交作业
-        
+
         Args:
             job: 要执行的作业
         """
-        # 设置组件执行器
-        self._setup_component_executors(job)
-        
-        # 设置连接
+        self._setup_executors(job)
         self._setup_connections()
-        
-        # 启动所有进程
         self._start_processes()
-        
-    def _setup_component_executors(self, job: Job) -> None:
-        """设置所有组件的执行器"""
-        # 从数据源开始遍历
+
+    def _setup_executors(self, job: Job) -> None:
+        """设置所有组件的执行器组"""
         for source in job.get_sources():
             executor = ComponentExecutor(source)
-            self.executors.append(executor)
+            self.component_executors.append(executor)
             self._traverse_component(source, executor)
-            
+
     def _setup_connections(self) -> None:
-        """设置执行器之间的连接"""
-        for executor in self.executors:
-            if executor.component.get_outgoing_stream():
-                queue = EventQueue(self.QUEUE_SIZE)
-                executor.set_outgoing_queue(queue)
-                
-                # 连接下游
-                for operator in executor.component.get_outgoing_stream().get_operators():
-                    downstream = self.operator_map.get(operator)
-                    if downstream:
-                        downstream.set_incoming_queue(queue)
-                        
+        """设置执行器组之间的连接"""
+        # for executor in self.component_executors:
+        #     downstream_operators = executor.component.get_downstream_operators()
+        #     if downstream_operators:
+        #         for operator in downstream_operators:
+        #             downstream = self.operator_map.get(operator)
+        #             if downstream:
+        #                 # 创建队列
+        #                 queue = EventQueue(self.QUEUE_SIZE)
+        #                 # 设置上游组的输出队列和下游组的输入队列
+        #                 executor.set_outgoing_queue(queue)
+        #                 downstream.set_incoming_queue(queue)
+        for connection in self.connections:
+            queue = EventQueue(self.QUEUE_SIZE)
+            connection.source.register_channel(connection.channel)
+            connection.source.add_outgoing_queue(queue, connection.channel)
+            connection.target.set_incoming_queue(queue)
+
     def _start_processes(self) -> None:
         """启动所有进程"""
-        self.executors.reverse()
-        for executor in self.executors:
+        for executor in self.component_executors:
             executor.start()
-            
-    def _traverse_component(self, component, executor):
-        """遍历组件"""
+
+    def _traverse_component(
+        self, component: Component, executor: ComponentExecutor
+    ) -> None:
+        """遍历组件及其下游"""
         stream = component.get_outgoing_stream()
-        if not stream:
-            return
-            
-        for operator in stream._operator_set:
-            if operator not in self.operator_map:
-                operator_executor = ComponentExecutor(operator)
-                self.operator_map[operator] = operator_executor
-                self.executors.append(operator_executor)
-                self._traverse_component(operator, operator_executor)
+
+        for channel in stream.get_channels():
+            for operator in stream.get_applied_operators(channel):
+                if operator not in self.operator_map:
+                    operator_executor = ComponentExecutor(operator)
+                    self.operator_map[operator] = operator_executor
+                    self.component_executors.append(operator_executor)
+                    self._traverse_component(operator, operator_executor)
+                else:
+                    operator_executor = self.operator_map[operator]
+
+                self.connections.append(
+                    Connection(executor, operator_executor, channel)
+                )

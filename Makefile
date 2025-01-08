@@ -10,6 +10,9 @@ SRC_DIR = src
 vehicle:
 	PYTHONPATH=./ $(PYTHON) -m src.vehicle.main
 
+fraud:
+	PYTHONPATH=./ $(PYTHON) -m src.fraud.fraud
+	
 # 清理生成的文件
 clean:
 	find . -type d -name "__pycache__" -exec rm -r {} +
