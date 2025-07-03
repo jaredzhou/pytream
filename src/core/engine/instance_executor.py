@@ -2,8 +2,7 @@ from typing import List, Dict, Set
 from .process import Process
 from ..event import Event, EventCollector
 from .event_queue import EventQueue
-from ..source import Source
-from ..operator import Operator
+from ..core import Source, Operator
 
 
 class InstanceExecutor(Process):

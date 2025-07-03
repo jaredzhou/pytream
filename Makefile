@@ -16,6 +16,12 @@ fraud:
 system_usage:
 	$(PYTHON) -m src.fraud.system_usage
 
+windowtest:
+	$(PYTHON) -m src.windowtest.windowtest
+
+emission:
+	$(PYTHON) -m src.emission.emission
+
 # 清理生成的文件
 clean:
 	find . -type d -name "__pycache__" -exec rm -r {} +

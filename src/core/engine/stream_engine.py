@@ -1,19 +1,23 @@
 from typing import List, Dict
 from ..job import Job
-from ..operator import Operator
+from ..core import Operator, Component
 from .component_executor import ComponentExecutor
 from .dispatch_executor import DispatchExecutor
 from .event_queue import EventQueue
-from ..component import Component
 
 
 class Connection:
     def __init__(
-        self, source: ComponentExecutor, target: ComponentExecutor, channel: str
+        self,
+        source: ComponentExecutor,
+        target: ComponentExecutor,
+        channel: str,
+        stream_name: str,
     ):
         self.source = source
         self.target = target
         self.channel = channel
+        self.stream_name = stream_name
 
 
 class StreamEngine:
@@ -57,7 +61,7 @@ class StreamEngine:
         #                 executor.set_outgoing_queue(queue)
         #                 downstream.set_incoming_queue(queue)
         for connection in self.connections:
-            queue = EventQueue(self.QUEUE_SIZE)
+            queue = EventQueue(self.QUEUE_SIZE, connection.stream_name)
             connection.source.register_channel(connection.channel)
             connection.source.add_outgoing_queue(queue, connection.channel)
             connection.target.set_incoming_queue(queue)
@@ -70,19 +74,25 @@ class StreamEngine:
     def _traverse_component(
         self, component: Component, executor: ComponentExecutor
     ) -> None:
-        """遍历组件及其下游"""
+        """遍历组件的下游算子"""
         stream = component.get_outgoing_stream()
 
+        # 遍历所有通道
         for channel in stream.get_channels():
-            for operator in stream.get_applied_operators(channel):
+            # 获取该通道的所有算子
+            operators = stream.get_applied_operators(channel)
+            # 遍历算子字典
+            for stream_name, operator in operators.items():
+                print(f"stream: {stream_name}, operator: {operator.name}")
                 if operator not in self.operator_map:
-                    operator_executor = ComponentExecutor(operator)
+                    operator_executor = ComponentExecutor(operator, self.QUEUE_SIZE)
                     self.operator_map[operator] = operator_executor
                     self.component_executors.append(operator_executor)
+                    # 递归遍历下游
                     self._traverse_component(operator, operator_executor)
                 else:
                     operator_executor = self.operator_map[operator]
 
                 self.connections.append(
-                    Connection(executor, operator_executor, channel)
+                    Connection(executor, operator_executor, channel, stream_name)
                 )

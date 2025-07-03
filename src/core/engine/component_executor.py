@@ -1,6 +1,6 @@
 from typing import List
 from copy import deepcopy
-from ..source import Source
+from ..core import Source, Component
 from .instance_executor import (
     InstanceExecutor,
     SourceInstanceExecutor,
@@ -9,7 +9,6 @@ from .instance_executor import (
 )
 from .event_queue import EventQueue
 from .dispatch_executor import DispatchExecutor
-from ..component import Component
 
 
 class ComponentExecutor:
@@ -19,7 +18,7 @@ class ComponentExecutor:
         self.component = component
         self.instance_executors: List[InstanceExecutor] = []
         self.dispatch_executor = None
-        self.incoming_queue = None
+        self.incoming_queues: List[EventQueue] = []
         self.queue_size = queue_size
 
         # 创建实例执行器
@@ -33,7 +32,6 @@ class ComponentExecutor:
             else:
                 instance = OperatorInstanceExecutor(i, instance_component)
                 # 为每个算子实例创建输入队列
-                instance.set_incoming_queue(EventQueue(queue_size))
             self.instance_executors.append(instance)
 
         # 如果不是Source，创建分发执行器
@@ -50,18 +48,19 @@ class ComponentExecutor:
         if self.dispatch_executor:
             self.dispatch_executor.start()
 
-    def set_incoming_queue(self, queue: EventQueue) -> None:
+    def set_incoming_queue(self, queues: List[EventQueue]) -> None:
         """设置输入队列到分发器，并为每个实例初始化输入队列"""
         if isinstance(self.component, Source):
             raise RuntimeError("数据源执行器不允许设置输入队列")
 
         # 设置分发器的输入队列
-        self.incoming_queue = queue
+        self.incoming_queues = queues
         self.dispatch_executor.set_incoming_queue(queue)
 
         # 为每个实例创建输入队列
         for instance in self.instance_executors:
-            instance.set_incoming_queue(EventQueue(self.queue_size))
+            q = EventQueue(self.queue_size, queue.get_stream_name())
+            instance.set_incoming_queue(q)
 
     def register_channel(self, channel: str) -> None:
         """注册新的通道"""

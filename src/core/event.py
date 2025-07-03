@@ -33,6 +33,18 @@ class Event(ABC):
         return self._data
 
 
+class TimedEvent(Event):
+    """时间戳事件"""
+
+    def __init__(self, data: Dict[str, Any]):
+        super().__init__(data)
+
+    @abstractmethod
+    def get_time(self) -> int:
+        """获取事件时间戳"""
+        pass
+
+
 class EventCollector:
     """事件收集器，支持多通道"""
 
@@ -66,3 +78,21 @@ class EventCollector:
         """清空所有通道的事件"""
         for queue in self.queues.values():
             queue.clear()
+
+
+class NamedEvent(Event):
+    """带有流名称的事件"""
+
+    def __init__(self, stream_name: str, data: Dict[str, Any]):
+        """初始化命名事件
+
+        Args:
+            stream_name: 流名称
+            data: 事件数据
+        """
+        super().__init__(data)
+        self._stream_name = stream_name
+
+    def get_stream_name(self) -> str:
+        """获取流名称"""
+        return self._stream_name

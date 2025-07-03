@@ -1,7 +1,8 @@
 from typing import cast
 from .process import Process
 from .event_queue import EventQueue
-from ..operator import Operator
+from ..core import Operator
+from ..grouping_strategy import GroupingStrategy
 
 
 class DispatchExecutor(Process):
@@ -14,7 +15,7 @@ class DispatchExecutor(Process):
         super().__init__()
         assert isinstance(downstream_executor, ComponentExecutor)
         self.downstream_executor = downstream_executor
-        self.incoming_queue = None
+        self.incoming_queue: EventQueue = None
 
     def run_once(self) -> bool:
         """执行一次事件分发"""
@@ -24,18 +25,25 @@ class DispatchExecutor(Process):
 
             # 获取分组策略 (转换为 Operator 类型)
             operator = cast(Operator, self.downstream_executor.component)
-            strategy = operator.get_grouping_strategy()
-            print(f"\nDispatcher using strategy: {strategy.__class__.__name__}")
+            print(f"\nOperator: {operator.__class__.__name__}")
+            strategy = operator.get_grouping_strategy(
+                self.incoming_queue.get_stream_name()
+            )
+            print(f"\nStrategy: {strategy.__class__.__name__}")
             # 计算目标实例
             instance_id = strategy.get_instance(
                 event, len(self.downstream_executor.instance_executors)
             )
-            # 获取目标实例的输入队列
-            target_queue = self.downstream_executor.instance_executors[
-                instance_id
-            ].get_incoming_queue()
-            # 发送事件
-            target_queue.put(event)
+            if instance_id == GroupingStrategy.ALL_INSTANCES:
+                for instance_executor in self.downstream_executor.instance_executors:
+                    instance_executor.get_incoming_queue().put(event)
+            else:
+                # 获取目标实例的输入队列
+                target_queue = self.downstream_executor.instance_executors[
+                    instance_id
+                ].get_incoming_queue()
+                # 发送事件
+                target_queue.put(event)
             return True
 
         except Exception as e:
